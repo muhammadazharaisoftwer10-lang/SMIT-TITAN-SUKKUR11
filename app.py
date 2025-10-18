@@ -1,233 +1,268 @@
 # app.py
-# SMIT TITAN SUKKUR — Stylish Students Performance Dashboard (Single-file)
-# Requirements:
-#   pip install streamlit pandas plotly numpy
-# Optional (for nicer table display): pip install openpyxl
+# 🎓 TITAN SUKKUR — Full Premium Students Analysis Dashboard (Single-file)
+# Auto-load Students_Performance.csv (or demo), Dark Blue theme, Plotly interactive charts,
+# KPIs, filters, Top Students, Subject analysis, Gender comparison, CSV & Excel export.
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.figure_factory as ff
-import plotly.graph_objects as go
+import io
+from datetime import datetime
 
 # --- Page config ---
-st.set_page_config(
-    page_title="SMIT TITAN SUKKUR Dashboard",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+st.set_page_config(page_title="TITAN SUKKUR Students Analysis Dashboard", layout="wide", initial_sidebar_state="expanded")
 
-# --- Styles (blue professional) ---
+# --- Styling: Dark Blue Premium ---
 st.markdown(
     """
     <style>
-    /* Body + background */
-    .reportview-container, .main {
-        background: linear-gradient(180deg,#f6f9ff 0%, #ffffff 100%);
+    :root {
+        --primary:#06283D;
+        --accent:#1673B1;
+        --muted:#9AAFC3;
+        --bg: linear-gradient(180deg,#071426 0%, #021424 100%);
     }
-    /* Header */
+    body, .reportview-container, .main {
+        background: var(--bg);
+        color: #e6f2ff;
+    }
     .big-header {
-        font-size:28px;
-        font-weight:700;
-        color:#0b4f8a;
-        letter-spacing:0.4px;
+        font-size:26px;
+        font-weight:800;
+        color:#9fe0ff;
+        letter-spacing:0.6px;
     }
     .sub-header {
-        color:#2b6cb0;
-        font-size:14px;
-        margin-top: -6px;
-    }
-    /* KPI card */
-    .kpi {
-        background: linear-gradient(180deg,#ffffff,#f1f8ff);
-        border-left: 4px solid #2b6cb0;
-        padding: 14px;
-        border-radius: 8px;
-        box-shadow: 0 2px 6px rgba(43,108,176,0.08);
-    }
-    .small {
-        color:#6b7280;
-        font-size:12px;
+        color:var(--muted);
+        font-size:13px;
+        margin-top:-6px;
     }
     .logo-text {
-        font-weight:800;
-        color:#0b4f8a;
+        font-weight:900;
+        color:#eaf6ff;
         font-size:18px;
         letter-spacing:1px;
     }
+    .kpi {
+        background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+        border-left: 4px solid var(--accent);
+        padding: 12px;
+        border-radius: 8px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    }
+    .small { color: var(--muted); font-size:12px; }
+    .card-title { color:#d8eefc; font-weight:700; margin-bottom:6px; }
+    .stButton>button { background: linear-gradient(90deg,var(--accent), #0B4F8A); color: white; border: none; }
+    footer {visibility: hidden;}
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# --- Header with text logo ---
-header_col1, header_col2 = st.columns([0.18, 0.82])
-with header_col1:
-    st.markdown('<div class="logo-text">SMIT<br><span style="font-size:12px;font-weight:600;">TITAN SUKKUR</span></div>', unsafe_allow_html=True)
-with header_col2:
-    st.markdown('<div class="big-header">SMIT TITAN SUKKUR — Students Performance Dashboard</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-header">Interactive visual analytics for student scores — filter, explore and export</div>', unsafe_allow_html=True)
-
+# --- Header ---
+hcol1, hcol2 = st.columns([0.18, 0.82])
+with hcol1:
+    st.markdown('<div class="logo-text">SMIT<br><span style="font-size:12px;font-weight:700;">TITAN SUKKUR</span></div>', unsafe_allow_html=True)
+with hcol2:
+    st.markdown('<div class="big-header">🎓 TITAN SUKKUR Students Analysis Dashboard (Full Premium)</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Interactive analytics — filters, charts, rankings, and downloadable reports.</div>', unsafe_allow_html=True)
 st.markdown("---")
 
-# --- Data loader with cache ---
+# --- Data loading (auto load file or demo) ---
 @st.cache_data
-def load_data_from_file(uploaded=None):
-    """Load CSV from local file or uploaded file-like object."""
-    if uploaded is not None:
-        df = pd.read_csv(uploaded)
-    else:
-        df = pd.read_csv("Students_Performance.csv")
-    # normalize column names to expected lower-case form
-    df.columns = [c.strip() for c in df.columns]
+def load_from_csv(path="Students_Performance.csv"):
+    return pd.read_csv(path)
+
+@st.cache_data
+def demo_data(n=300, seed=42):
+    rng = np.random.default_rng(seed)
+    genders = ["female", "male"]
+    races = ["group A","group B","group C","group D","group E"]
+    pedu = ["some high school","high school","some college","associate's degree","bachelor's degree","master's degree"]
+    lunch = ["standard","free/reduced"]
+    prep = ["none","completed"]
+    df = pd.DataFrame({
+        "gender": rng.choice(genders, n),
+        "race/ethnicity": rng.choice(races, n),
+        "parental level of education": rng.choice(pedu, n),
+        "lunch": rng.choice(lunch, n),
+        "test preparation course": rng.choice(prep, n),
+        "math score": rng.integers(35, 100, n),
+        "reading score": rng.integers(30, 100, n),
+        "writing score": rng.integers(28, 100, n)
+    })
     return df
 
-# If file missing, let user upload
+# Attempt to load provided CSV; if missing -> demo automatically
+df = None
+data_source = "local"
 try:
-    df = load_data_from_file()
+    df = load_from_csv()
 except FileNotFoundError:
-    st.error("Students_Performance.csv not found. Please upload your CSV file below.")
-    uploaded_file = st.file_uploader("Upload Students_Performance.csv", type=["csv"])
-    if uploaded_file:
-        try:
-            df = load_data_from_file(uploaded_file)
-            st.success("File uploaded and loaded successfully.")
-        except Exception as e:
-            st.error(f"Could not read uploaded file: {e}")
-            st.stop()
-    else:
-        st.stop()
+    df = demo_data()
+    data_source = "demo (auto-loaded)"
 except Exception as e:
     st.error(f"Error loading dataset: {e}")
-    st.stop()
+    df = demo_data()
+    data_source = f"demo (auto-loaded due to error)"
 
-# --- Validate expected columns ---
-expected = {"gender","race/ethnicity","parental level of education","lunch","test preparation course",
-            "math score","reading score","writing score"}
-missing = expected - set([c.lower() for c in df.columns])
-if missing:
-    st.warning(f"Your CSV is missing these expected columns (case-sensitive check): {missing}. The app will still try to work with what it has.")
-# Make sure numeric types
-for col in ["math score","reading score","writing score"]:
-    if col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+st.sidebar.header("Data")
+st.sidebar.markdown(f"**Source:** {data_source}")
 
-# --- Sidebar filters ---
-st.sidebar.header("Filters")
-# Helpful: map column names case-insensitively
-def get_col(name_options):
-    for n in name_options:
-        if n in df.columns:
-            return n
-    # fallback try lower-case keys
+# Normalize column names
+df.columns = [c.strip() for c in df.columns]
+
+# Helper: find column case-insensitively
+def find_col(name_lower):
     for c in df.columns:
-        if c.lower() in name_options:
+        if c.lower() == name_lower:
             return c
     return None
 
-col_gender = get_col(["gender", "Gender"])
-col_peducation = get_col(["parental level of education","parental level of education"])
-col_test = get_col(["test preparation course","test preparation course"])
-col_math = get_col(["math score","math score"])
-col_read = get_col(["reading score","reading score"])
-col_write = get_col(["writing score","writing score"])
+col_gender = find_col("gender")
+col_race = find_col("race/ethnicity")
+col_peducation = find_col("parental level of education")
+col_lunch = find_col("lunch")
+col_testprep = find_col("test preparation course")
+col_math = find_col("math score")
+col_read = find_col("reading score")
+col_write = find_col("writing score")
 
-# Provide filter widgets with safe defaults
+# Ensure numeric for score columns
+for c in [col_math, col_read, col_write]:
+    if c:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+
+# --- Sidebar Filters (no file upload) ---
+st.sidebar.header("Filters & Controls")
 if col_gender:
-    gender_opts = sorted(df[col_gender].dropna().unique().tolist())
-    gender = st.sidebar.multiselect("Gender", options=gender_opts, default=gender_opts)
+    genders = sorted(df[col_gender].dropna().unique().tolist())
+    sel_gender = st.sidebar.multiselect("Gender", options=genders, default=genders)
 else:
-    gender = None
+    sel_gender = None
 
-if col_test:
-    test_opts = sorted(df[col_test].dropna().unique().tolist())
-    test_prep = st.sidebar.multiselect("Test Preparation", options=test_opts, default=test_opts)
+if col_testprep:
+    prep_opts = sorted(df[col_testprep].dropna().unique().tolist())
+    sel_prep = st.sidebar.multiselect("Test Preparation", options=prep_opts, default=prep_opts)
 else:
-    test_prep = None
+    sel_prep = None
 
 if col_peducation:
     pedu_opts = sorted(df[col_peducation].dropna().unique().tolist())
-    pedu = st.sidebar.multiselect("Parent Education Level", options=pedu_opts, default=pedu_opts)
+    sel_pedu = st.sidebar.multiselect("Parent Education", options=pedu_opts, default=pedu_opts)
 else:
-    pedu = None
+    sel_pedu = None
 
-# Score range sliders
-min_math = int(np.nanmin(df[col_math])) if col_math and df[col_math].notna().any() else 0
-max_math = int(np.nanmax(df[col_math])) if col_math and df[col_math].notna().any() else 100
-math_range = st.sidebar.slider("Math score range", min_value=0, max_value=100, value=(min_math, max_math))
+# Score sliders with safe defaults
+def min_max_for(col, default=(0,100)):
+    if col and df[col].notna().any():
+        return int(df[col].min()), int(df[col].max())
+    return default
 
-# Apply filters to dataframe
+math_min, math_max = min_max_for(col_math)
+read_min, read_max = min_max_for(col_read)
+write_min, write_max = min_max_for(col_write)
+
+sel_math = st.sidebar.slider("Math score range", 0, 100, (math_min, math_max))
+sel_read = st.sidebar.slider("Reading score range", 0, 100, (read_min, read_max))
+sel_write = st.sidebar.slider("Writing score range", 0, 100, (write_min, write_max))
+
+# Quick toggle: show detailed analysis
+detailed = st.sidebar.checkbox("Show advanced subjects analysis", value=True)
+
+# Apply filters
 filtered = df.copy()
-if col_gender and gender is not None:
-    filtered = filtered[filtered[col_gender].isin(gender)]
-if col_test and test_prep is not None:
-    filtered = filtered[filtered[col_test].isin(test_prep)]
-if col_peducation and pedu is not None:
-    filtered = filtered[filtered[col_peducation].isin(pedu)]
-# numeric range
+if col_gender and sel_gender:
+    filtered = filtered[filtered[col_gender].isin(sel_gender)]
+if col_testprep and sel_prep:
+    filtered = filtered[filtered[col_testprep].isin(sel_prep)]
+if col_peducation and sel_pedu:
+    filtered = filtered[filtered[col_peducation].isin(sel_pedu)]
 if col_math:
-    filtered = filtered[(filtered[col_math] >= math_range[0]) & (filtered[col_math] <= math_range[1])]
+    filtered = filtered[(filtered[col_math] >= sel_math[0]) & (filtered[col_math] <= sel_math[1])]
+if col_read:
+    filtered = filtered[(filtered[col_read] >= sel_read[0]) & (filtered[col_read] <= sel_read[1])]
+if col_write:
+    filtered = filtered[(filtered[col_write] >= sel_write[0]) & (filtered[col_write] <= sel_write[1])]
 
-# --- Top bar KPIs ---
+# --- Top KPI row ---
 st.subheader("Overview")
-k1, k2, k3, k4 = st.columns([1.2,1.2,1.2,1.2])
+k1, k2, k3, k4 = st.columns([1.2,1.2,1.2,1.0])
 
-def metric_block(col, label, value, delta=None):
-    with col:
-        st.markdown(f'<div class="kpi"><div style="font-size:14px;color:#0b4f8a;font-weight:700">{label}</div>'
-                    f'<div style="font-size:26px;margin-top:6px">{value}</div>'
-                    f'<div class="small" style="margin-top:8px">{delta if delta else ""}</div></div>', unsafe_allow_html=True)
+def safe_mean(d, c):
+    return round(d[c].mean(),2) if (c and c in d.columns and d[c].notna().any()) else "N/A"
 
-# compute averages safely
-def safe_mean(df, c):
-    return round(df[c].mean(),2) if (c in df.columns and df[c].notna().any()) else "N/A"
-
-metric_block(k1, "Average Math Score", safe_mean(filtered, col_math))
-metric_block(k2, "Average Reading Score", safe_mean(filtered, col_read))
-metric_block(k3, "Average Writing Score", safe_mean(filtered, col_write))
-metric_block(k4, "Filtered Rows", len(filtered))
+with k1:
+    st.markdown('<div class="kpi"><div style="font-size:13px;color:#9fe0ff;font-weight:700">Average Math</div>'
+                f'<div style="font-size:22px;margin-top:6px">{safe_mean(filtered, col_math)}</div>'
+                '<div class="small">Filtered average</div></div>', unsafe_allow_html=True)
+with k2:
+    st.markdown('<div class="kpi"><div style="font-size:13px;color:#9fe0ff;font-weight:700">Average Reading</div>'
+                f'<div style="font-size:22px;margin-top:6px">{safe_mean(filtered, col_read)}</div>'
+                '<div class="small">Filtered average</div></div>', unsafe_allow_html=True)
+with k3:
+    st.markdown('<div class="kpi"><div style="font-size:13px;color:#9fe0ff;font-weight:700">Average Writing</div>'
+                f'<div style="font-size:22px;margin-top:6px">{safe_mean(filtered, col_write)}</div>'
+                '<div class="small">Filtered average</div></div>', unsafe_allow_html=True)
+with k4:
+    st.markdown('<div class="kpi"><div style="font-size:13px;color:#9fe0ff;font-weight:700">Records</div>'
+                f'<div style="font-size:22px;margin-top:6px">{len(filtered):,}</div>'
+                '<div class="small">Rows shown</div></div>', unsafe_allow_html=True)
 
 st.markdown("---")
 
-# --- Layout for charts and controls ---
+# --- Main layout ---
 left, right = st.columns((2.2, 1))
 
 with left:
-    # Visual 1: Average Scores by Gender (Plotly)
-    st.markdown("### Average Math Score by Gender")
-    if col_gender and col_math:
-        agg = filtered.groupby(col_gender)[col_math].mean().reset_index().rename(columns={col_gender:"gender", col_math:"math_avg"})
-        fig_gender = px.bar(
-            agg, x=col_gender, y="math_avg",
-            labels={col_gender:"Gender","math_avg":"Avg Math Score"},
-            text=agg["math_avg"].round(2),
-            height=340
-        )
-        fig_gender.update_layout(template="plotly_white", title=None, margin=dict(l=20,r=20,t=20,b=20))
-        st.plotly_chart(fig_gender, use_container_width=True, config={"displaylogo": False, "modeBarButtonsToRemove":["lasso2d","select2d"]})
-        # Expand button for this chart
-        if st.button("Expand: Gender Math Chart", key="expand_gender"):
-            st.plotly_chart(fig_gender.update_layout(height=720), use_container_width=True, config={"displaylogo": False})
+    # 1) Gender vs Subject comparison (grouped bars)
+    st.markdown("### Gender vs Average Scores")
+    if col_gender and any([col_math, col_read, col_write]):
+        score_cols = [c for c in [col_math, col_read, col_write] if c]
+        agg = filtered.groupby(col_gender)[score_cols].mean().reset_index()
+        # melt for plotly grouped bar
+        melt = agg.melt(id_vars=[col_gender], value_vars=score_cols, var_name="subject", value_name="avg_score")
+        # short subject names
+        melt["subject_label"] = melt["subject"].map({col_math:"Math", col_read:"Reading", col_write:"Writing"})
+        fig1 = px.bar(melt, x=col_gender, y="avg_score", color="subject_label", barmode="group",
+                      labels={col_gender:"Gender", "avg_score":"Average Score", "subject_label":"Subject"},
+                      height=420)
+        fig1.update_layout(template="plotly_dark", margin=dict(l=8,r=8,t=30,b=8))
+        st.plotly_chart(fig1, use_container_width=True, config={"displaylogo": False})
+        if st.button("Expand: Gender vs Subjects", key="exp_gender_subject"):
+            st.plotly_chart(fig1.update_layout(height=760), use_container_width=True, config={"displaylogo": False})
     else:
-        st.info("Gender or Math score column not found in dataset.")
+        st.info("Not enough columns to show Gender vs Subjects chart.")
 
-    st.markdown("### Distribution of Reading Scores")
+    # 2) Distribution per subject (hist + box)
+    st.markdown("### Subject Distributions")
+    cols_to_show = []
+    if col_math:
+        cols_to_show.append(col_math)
     if col_read:
-        fig_hist = px.histogram(filtered, x=col_read, nbins=20, marginal="box", opacity=0.9, height=360,
-                                labels={col_read:"Reading Score"}, title=None)
-        fig_hist.update_layout(template="plotly_white", margin=dict(l=20,r=20,t=10,b=20))
-        st.plotly_chart(fig_hist, use_container_width=True, config={"displaylogo": False})
-        if st.button("Expand: Reading Distribution", key="expand_read"):
-            st.plotly_chart(fig_hist.update_layout(height=720), use_container_width=True, config={"displaylogo": False})
-    else:
-        st.info("Reading score column not found.")
+        cols_to_show.append(col_read)
+    if col_write:
+        cols_to_show.append(col_write)
 
+    if cols_to_show:
+        # create a subplot-like vertical stack - show each
+        for c in cols_to_show:
+            friendly = "Math" if c==col_math else ("Reading" if c==col_read else "Writing")
+            fig_hist = px.histogram(filtered, x=c, nbins=20, marginal="box", title=f"{friendly} Score Distribution", height=300)
+            fig_hist.update_layout(template="plotly_dark", margin=dict(l=8,r=8,t=30,b=8))
+            st.plotly_chart(fig_hist, use_container_width=True, config={"displaylogo": False})
+            if st.button(f"Expand: {friendly} Distribution", key=f"exp_{c}"):
+                st.plotly_chart(fig_hist.update_layout(height=760), use_container_width=True, config={"displaylogo": False})
+    else:
+        st.info("No subject score columns found for distributions.")
+
+    # 3) Correlation heatmap
     st.markdown("### Correlation Heatmap (scores)")
-    # Heatmap with plotly
-    score_cols = [c for c in [col_math, col_read, col_write] if c and c in filtered.columns]
-    if len(score_cols) >= 2:
-        corr = filtered[score_cols].corr()
+    score_cols_present = [c for c in [col_math, col_read, col_write] if c and c in filtered.columns]
+    if len(score_cols_present) >= 2:
+        corr = filtered[score_cols_present].corr()
         fig_heat = ff.create_annotated_heatmap(
             z=np.round(corr.values, 2),
             x=corr.columns.tolist(),
@@ -235,54 +270,139 @@ with left:
             colorscale='Blues',
             showscale=True
         )
-        fig_heat.update_layout(height=360, template="plotly_white", margin=dict(l=20,r=20,t=10,b=10))
+        fig_heat.update_layout(template="plotly_dark", height=380, margin=dict(l=8,r=8,t=8,b=8))
         st.plotly_chart(fig_heat, use_container_width=True, config={"displaylogo": False})
-        if st.button("Expand: Correlation Heatmap", key="expand_heat"):
-            st.plotly_chart(fig_heat.update_layout(height=720), use_container_width=True, config={"displaylogo": False})
+        if st.button("Expand: Correlation Heatmap", key="exp_heat"):
+            st.plotly_chart(fig_heat.update_layout(height=760), use_container_width=True, config={"displaylogo": False})
     else:
         st.info("Not enough score columns for correlation heatmap.")
 
+    # 4) Advanced: Subject Radar (if detailed checked)
+    if detailed and len(score_cols_present) == 3:
+        st.markdown("### Subjects Radar (average per group)")
+        # group by race or gender preference
+        groupby_col = col_race if col_race else col_gender
+        if groupby_col:
+            grp = filtered.groupby(groupby_col)[score_cols_present].mean().reset_index()
+            # create a radar per top 4 groups
+            topg = grp.sort_values(score_cols_present[0], ascending=False).head(4)
+            fig_radar = px.line_polar()
+            # prepare traces
+            fig = px.line_polar()
+            for i, row in topg.iterrows():
+                values = row[score_cols_present].tolist()
+                labels = ["Math" if c==col_math else ("Reading" if c==col_read else "Writing") for c in score_cols_present]
+                # close polygon
+                fig.add_trace(px.line_polar(r=values+[values[0]], theta=labels+[labels[0]], name=str(row[groupby_col])).data[0])
+            fig.update_layout(template="plotly_dark", height=420, polar=dict(radialaxis=dict(visible=True, range=[0,100])))
+            st.plotly_chart(fig, use_container_width=True, config={"displaylogo": False})
+        else:
+            st.info("No grouping column (race/gender) found for radar chart.")
+
 with right:
     st.markdown("### Filters Summary")
-    st.markdown(f"- Gender: **{', '.join(gender) if gender else 'All'}**")
-    st.markdown(f"- Test Prep: **{', '.join(test_prep) if test_prep else 'All'}**")
-    st.markdown(f"- Parent Edu: **{', '.join(pedu) if pedu else 'All'}**")
-    st.markdown(f"- Math range: **{math_range[0]} — {math_range[1]}**")
+    def join_or_all(sel):
+        if isinstance(sel, list):
+            return ", ".join(sel) if sel else "All"
+        return str(sel)
+    st.markdown(f"- **Gender:** {join_or_all(sel_gender)}")
+    st.markdown(f"- **Test Prep:** {join_or_all(sel_prep)}")
+    st.markdown(f"- **Parent Edu:** {join_or_all(sel_pedu)}")
+    st.markdown(f"- **Math range:** {sel_math[0]} — {sel_math[1]}")
+    st.markdown(f"- **Reading range:** {sel_read[0]} — {sel_read[1]}")
+    st.markdown(f"- **Writing range:** {sel_write[0]} — {sel_write[1]}")
     st.markdown("---")
 
-    # Download filtered CSV
-    st.markdown("### Export")
-    csv_bytes = filtered.to_csv(index=False).encode('utf-8')
-    st.download_button("Download Filtered CSV", csv_bytes, file_name="students_filtered.csv", mime="text/csv")
-
-    st.markdown("---")
-    # Quick small table preview
+    # Data preview
     st.markdown("### Data Preview")
-    st.dataframe(filtered.head(8), height=240)
-    st.markdown("---")
+    st.dataframe(filtered.head(8), height=220)
+
     # Top Students ranking
     st.markdown("### Top Students (by average score)")
-    if set([col_math,col_read,col_write]) <= set(filtered.columns):
-        filtered["avg_score"] = filtered[[col_math,col_read,col_write]].mean(axis=1)
+    tmp = filtered.copy()
+    if score_cols_present:
+        tmp["avg_score"] = tmp[score_cols_present].mean(axis=1)
+        top_n = st.number_input("Show top N students", min_value=3, max_value=200, value=10, step=1)
+        top_table = tmp.sort_values("avg_score", ascending=False).head(int(top_n))
+        display_cols = [c for c in [col_gender, col_peducation, col_testprep] if c in top_table.columns]
+        display_cols += score_cols_present + ["avg_score"]
+        top_table = top_table[display_cols].reset_index(drop=True)
+        # round numeric columns for neatness
+        for c in score_cols_present + ["avg_score"]:
+            if c in top_table.columns:
+                top_table[c] = top_table[c].round(2)
+        st.dataframe(top_table, height=320)
     else:
-        # attempt to compute avg from available score cols
-        available = [c for c in [col_math,col_read,col_write] if c in filtered.columns]
-        if available:
-            filtered["avg_score"] = filtered[available].mean(axis=1)
-        else:
-            filtered["avg_score"] = np.nan
+        st.info("No score columns available to compute top students.")
 
-    # show top N
-    top_n = st.number_input("Show top N students", min_value=3, max_value=50, value=10, step=1)
-    top_table = filtered.sort_values("avg_score", ascending=False).head(top_n)[
-        [c for c in [col_gender, col_peducation, col_test, col_math, col_read, col_write, "avg_score"] if c in filtered.columns]
-    ].reset_index(drop=True)
-    # format: round scores
-    for c in [col_math, col_read, col_write, "avg_score"]:
-        if c in top_table.columns:
-            top_table[c] = top_table[c].round(2)
-    st.dataframe(top_table, height=320)
+    st.markdown("---")
+    # Export buttons: CSV + Excel report
+    st.markdown("### Export / Reports")
+    csv_bytes = filtered.to_csv(index=False).encode("utf-8")
+    st.download_button("Download Filtered CSV", csv_bytes, file_name="students_filtered.csv", mime="text/csv")
 
-# --- Footer / credits ---
+    def create_excel_report(df_report):
+        """
+        Create an Excel file in-memory with:
+        - Sheet1: filtered data
+        - Sheet2: summary KPIs
+        - Sheet3: top students
+        Returns bytes
+        """
+        output = io.BytesIO()
+        # Use pandas ExcelWriter (openpyxl)
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            # Sheet: data
+            df_report.to_excel(writer, sheet_name="Filtered Data", index=False)
+            # Summary
+            summary = {}
+            if col_math: summary["Avg Math"] = round(df_report[col_math].mean(),2)
+            if col_read: summary["Avg Reading"] = round(df_report[col_read].mean(),2)
+            if col_write: summary["Avg Writing"] = round(df_report[col_write].mean(),2)
+            summary["Rows"] = len(df_report)
+            pd.DataFrame(list(summary.items()), columns=["Metric","Value"]).to_excel(writer, sheet_name="Summary", index=False)
+            # Top students
+            if score_cols_present:
+                tmp2 = df_report.copy()
+                tmp2["avg_score"] = tmp2[score_cols_present].mean(axis=1)
+                top = tmp2.sort_values("avg_score", ascending=False).head(50)
+                top.to_excel(writer, sheet_name="Top Students", index=False)
+            writer.save()
+            processed_data = output.getvalue()
+        return processed_data
+
+    try:
+        excel_bytes = create_excel_report(filtered)
+        st.download_button("Download Excel Report (.xlsx)", excel_bytes, file_name=f"students_report_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    except Exception as e:
+        st.info("Excel export requires openpyxl. Install `openpyxl` to enable Excel report.")
+        # fallback: provide CSV only (already provided)
+
 st.markdown("---")
-st.markdown('<div style="text-align:center;color:#6b7280">Built by Ahmed Sabur • SMIT TITAN SUKKUR • Powered by Streamlit & Plotly</div>', unsafe_allow_html=True)
+
+# --- Insights row ---
+ins1, ins2, ins3 = st.columns(3)
+with ins1:
+    st.markdown("**Mean of Averages**")
+    if score_cols_present:
+        filtered["avg_score"] = filtered[score_cols_present].mean(axis=1)
+        st.metric("Mean Avg Score", round(filtered["avg_score"].mean(),2))
+    else:
+        st.write("N/A")
+with ins2:
+    st.markdown("**Completed Test Prep**")
+    if col_testprep and filtered[col_testprep].dtype == object:
+        completed = filtered[filtered[col_testprep].str.lower() == "completed"].shape[0]
+        st.metric("Completed", f"{completed}")
+    else:
+        st.write("N/A")
+with ins3:
+    st.markdown("**High Achievers (avg >= 85)**")
+    if "avg_score" in filtered.columns:
+        ha = filtered[filtered["avg_score"] >= 85].shape[0]
+        st.metric("Count", f"{ha}")
+    else:
+        st.write("N/A")
+
+st.markdown("---")
+st.markdown('<div style="text-align:center;color:#9aaec6">Built by Ahmed Sabur • SMIT TITAN SUKKUR • Full Premium Dashboard • Plotly</div>', unsafe_allow_html=True)
