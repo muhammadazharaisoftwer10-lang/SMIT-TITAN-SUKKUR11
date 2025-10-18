@@ -10,7 +10,7 @@ from io import StringIO
 # Page config
 # -------------------------
 st.set_page_config(
-    page_title="SMIT TITAN Sukkur    Students Performance Dashboard –",
+    page_title="Students Performance Dashboard –",
     layout="wide",
     initial_sidebar_state="expanded",
 )
