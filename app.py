@@ -4,13 +4,12 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from io import StringIO
 
 # -------------------------
 # Page config
 # -------------------------
 st.set_page_config(
-    page_title="Students Performance Dashboard –",
+    page_title="Students_Performance Dashboard –",
     layout="wide",
     initial_sidebar_state="expanded",
 )
